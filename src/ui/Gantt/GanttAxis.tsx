@@ -186,12 +186,11 @@ interface PruhProps {
   barva: string;
   popisek?: string;
   tooltip: string;
-  zvyraznitOkraj?: boolean;
   pruhledny?: boolean;
 }
 
 /** Vodorovný pruh fáze s popiskem oříznutým na šířku pruhu a tooltipem. */
-export function Pruh({ id, x, y, sirka, vyska, barva, popisek, tooltip, zvyraznitOkraj, pruhledny }: PruhProps) {
+export function Pruh({ id, x, y, sirka, vyska, barva, popisek, tooltip, pruhledny }: PruhProps) {
   const s = Math.max(sirka, 2);
   const clipId = `clip-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
   return (
@@ -207,8 +206,6 @@ export function Pruh({ id, x, y, sirka, vyska, barva, popisek, tooltip, zvyrazni
         rx={2}
         fill={barva}
         fillOpacity={pruhledny ? 0.35 : 1}
-        stroke={zvyraznitOkraj ? '#7f1d1d' : 'none'}
-        strokeWidth={zvyraznitOkraj ? 2 : 0}
       />
       {popisek && s > 24 && (
         <text x={x + 4} y={y + vyska / 2 + 3.5} fontSize={10} fill={pruhledny ? '#1f2937' : '#fff'} clipPath={`url(#${clipId})`}>
@@ -272,15 +269,20 @@ export function GanttPopisky({ vyska, radky }: { vyska: number; radky: RadekPopi
   );
 }
 
-export function Legenda({ polozky }: { polozky: { barva: string; text: string; pruhledny?: boolean; okraj?: boolean }[] }) {
+export function Legenda({ polozky, cekani }: { polozky: { barva: string; text: string; pruhledny?: boolean }[]; cekani?: boolean }) {
   return (
     <div className="gantt-legenda">
       {polozky.map((p) => (
         <span key={p.text}>
-          <i style={{ background: p.barva, opacity: p.pruhledny ? 0.35 : 1, outline: p.okraj ? '2px solid #7f1d1d' : 'none' }} />
+          <i style={{ background: p.barva, opacity: p.pruhledny ? 0.35 : 1 }} />
           {p.text}
         </span>
       ))}
+      {cekani && (
+        <span>
+          <i className="legenda-cekani" /> čekání ve frontě
+        </span>
+      )}
       <span>
         <i className="legenda-cara legenda-plan" /> začátek plánu
       </span>

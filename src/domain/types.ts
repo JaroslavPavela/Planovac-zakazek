@@ -6,6 +6,17 @@ export type FazeId = 'tpv' | StrojId | 'kompletace';
 export const STROJE: readonly StrojId[] = ['stroj1', 'stroj2', 'stroj3'];
 export const FAZE: readonly FazeId[] = ['tpv', ...STROJE, 'kompletace'];
 
+/** Fáze plánované ve vlastní frontě (5.7): stroje a kompletace. */
+export type NavazujiciFaze = StrojId | 'kompletace';
+export const NAVAZUJICI_FAZE: readonly NavazujiciFaze[] = [...STROJE, 'kompletace'];
+
+/** Pořadí ve frontách strojů a kompletace: fáze → čísla zakázek v pořadí fronty. */
+export type PoradiFaze = Record<NavazujiciFaze, string[]>;
+
+export function prazdnePoradiFaze(): PoradiFaze {
+  return { stroj1: [], stroj2: [], stroj3: [], kompletace: [] };
+}
+
 export interface Zakazka {
   cislo: string;
   nazev: string;
@@ -48,6 +59,7 @@ export interface FazeRozvrh {
   start: PracovniCas;
   konec: PracovniCas;
   hodiny: number;
+  pripraveno?: PracovniCas; // jen stroje a kompletace: konec předchozí fáze; start > pripraveno = čekání ve frontě
 }
 
 export type Stav = 'ok' | 'ohrozeno' | 'pozde' | 'neprirazeno';
@@ -66,6 +78,7 @@ export interface Rozvrh {
   zakazky: Record<string, RozvrhZakazky>;
   konecFronty: Record<string, PracovniCas>; // per přípravář
   vytizeni: Record<string, Record<string, number>>; // přípravář → ISO týden ('2026-W42') → přidělené hodiny TPV
+  frontyFaze: PoradiFaze; // výsledné pořadí front strojů a kompletace (ruční pořadí + nové zakázky podle připravenosti)
 }
 
 export interface StavAplikace {
@@ -73,6 +86,7 @@ export interface StavAplikace {
   pripravari: Pripravar[];
   prirazeni: Prirazeni[];
   nastaveni: Nastaveni;
+  poradiFaze?: Partial<PoradiFaze>; // ruční pořadí front strojů a kompletace; chybějící/prázdná fronta = automaticky podle připravenosti
 }
 
 /** Hodiny dané fáze zakázky. */

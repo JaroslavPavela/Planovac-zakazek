@@ -9,5 +9,9 @@ export function useRozvrh(): Rozvrh {
   const pripravari = usePlanStore((s) => s.pripravari);
   const prirazeni = usePlanStore((s) => s.prirazeni);
   const nastaveni = usePlanStore((s) => s.nastaveni);
-  return useMemo(() => naplanuj({ zakazky, pripravari, prirazeni, nastaveni }), [zakazky, pripravari, prirazeni, nastaveni]);
+  const poradiFaze = usePlanStore((s) => s.poradiFaze);
+  return useMemo(
+    () => naplanuj({ zakazky, pripravari, prirazeni, nastaveni, poradiFaze }),
+    [zakazky, pripravari, prirazeni, nastaveni, poradiFaze],
+  );
 }

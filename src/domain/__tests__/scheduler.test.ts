@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dostupneHodinyVTydnu, hodinyPoDnech, naplanuj } from '../scheduler';
+import { dostupneHodinyVTydnu, hodinyPoDnech, naplanuj, sestavFrontu } from '../scheduler';
 import { nejpozdejsiStart, urciStav } from '../risk';
 import { vychoziNastaveni, vychoziPripravari } from '../types';
 import type { Nastaveni, Prirazeni, StavAplikace, Zakazka } from '../types';
@@ -126,17 +126,105 @@ describe('naplanuj — navazující fáze', () => {
     expect(r.zakazky.A.predpokladaneDokonceni).toEqual({ den: UT, zlomek: 0.5 });
   });
 
-  it('stroje jiných zakázek se neovlivňují (kolize se neřeší)', () => {
+  it('stroje a kompletace mají jako připravenost konec předchozí fáze', () => {
     const r = naplanuj(
-      stav(
-        [zakazka('A', { tpvHod: 8, stroj1Hod: 8 }), zakazka('B', { tpvHod: 8, stroj1Hod: 8 })],
+      stav([zakazka('A', { tpvHod: 8, stroj1Hod: 4, stroj2Hod: 8, kompletaceHod: 4 })], [{ zakazkaCislo: 'A', pripravarId: 'p1', poradi: 0 }]),
+    );
+    const f = r.zakazky.A.faze;
+    expect(f.tpv!.pripraveno).toBeUndefined();
+    expect(f.stroj1!.pripraveno).toEqual({ den: PO, zlomek: 1 });
+    expect(f.kompletace!.pripraveno).toEqual({ den: UT, zlomek: 1 });
+  });
+});
+
+describe('naplanuj — fronty strojů a kompletace', () => {
+  const dveNaStroji1 = (cast: Partial<Zakazka> = {}) => [
+    zakazka('A', { tpvHod: 8, stroj1Hod: 8 }),
+    zakazka('B', { tpvHod: 8, stroj1Hod: 8, ...cast }),
+  ];
+  const kazdyJinyPripravar: Prirazeni[] = [
+    { zakazkaCislo: 'A', pripravarId: 'p1', poradi: 0 },
+    { zakazkaCislo: 'B', pripravarId: 'p2', poradi: 0 },
+  ];
+
+  it('dvě zakázky na stejném stroji se nepřekrývají, výchozí pořadí podle připravenosti', () => {
+    const r = naplanuj(stav(dveNaStroji1(), kazdyJinyPripravar));
+    expect(r.frontyFaze.stroj1).toEqual(['A', 'B']);
+    expect(r.zakazky.A.faze.stroj1).toMatchObject({ start: { den: PO, zlomek: 1 }, konec: { den: UT, zlomek: 1 } });
+    expect(r.zakazky.B.faze.stroj1).toMatchObject({ start: { den: UT, zlomek: 1 }, konec: { den: '2026-10-14', zlomek: 1 } });
+    expect(r.zakazky.B.faze.stroj1!.pripraveno).toEqual({ den: PO, zlomek: 1 }); // čekala ve frontě
+  });
+
+  it('ruční pořadí fronty určí, kdo jde na stroj první', () => {
+    const r = naplanuj({ ...stav(dveNaStroji1(), kazdyJinyPripravar), poradiFaze: { stroj1: ['B', 'A'] } });
+    expect(r.frontyFaze.stroj1).toEqual(['B', 'A']);
+    expect(r.zakazky.B.faze.stroj1).toMatchObject({ start: { den: PO, zlomek: 1 }, konec: { den: UT, zlomek: 1 } });
+    expect(r.zakazky.A.faze.stroj1).toMatchObject({ start: { den: UT, zlomek: 1 }, konec: { den: '2026-10-14', zlomek: 1 } });
+  });
+
+  it('stroj čeká na zakázku, která je ve frontě dřív, i když ještě nemá hotové TPV', () => {
+    const zakazky = [zakazka('A', { tpvHod: 40, stroj1Hod: 8 }), zakazka('B', { tpvHod: 8, stroj1Hod: 8, terminDokonceni: '2026-10-16' })];
+    const auto = naplanuj(stav(zakazky, kazdyJinyPripravar));
+    expect(auto.frontyFaze.stroj1).toEqual(['B', 'A']);
+    expect(auto.zakazky.B.stav).toBe('ok');
+
+    const r = naplanuj({ ...stav(zakazky, kazdyJinyPripravar), poradiFaze: { stroj1: ['A', 'B'] } });
+    // A má TPV hotové v pátek 16. 10. večer, stroj 1 na ni čeká; B jde až po ní.
+    expect(r.zakazky.A.faze.stroj1).toMatchObject({ start: { den: '2026-10-16', zlomek: 1 }, konec: { den: '2026-10-19', zlomek: 1 } });
+    expect(r.zakazky.B.faze.stroj1).toMatchObject({ start: { den: '2026-10-19', zlomek: 1 }, konec: { den: '2026-10-20', zlomek: 1 } });
+    expect(r.zakazky.B.predpokladaneDokonceni).toEqual({ den: '2026-10-20', zlomek: 1 });
+    expect(r.zakazky.B.stav).toBe('pozde');
+  });
+
+  it('kompletace čeká na nejdelší stroj zakázky i na předchozí zakázku ve frontě kompletace', () => {
+    const zakazky = [
+      zakazka('A', { tpvHod: 8, stroj1Hod: 8, kompletaceHod: 8 }),
+      zakazka('B', { tpvHod: 8, stroj2Hod: 16, kompletaceHod: 8 }),
+    ];
+    const auto = naplanuj(stav(zakazky, kazdyJinyPripravar));
+    expect(auto.frontyFaze.kompletace).toEqual(['A', 'B']);
+    expect(auto.zakazky.A.faze.kompletace).toMatchObject({ start: { den: UT, zlomek: 1 }, konec: { den: '2026-10-14', zlomek: 1 } });
+    expect(auto.zakazky.B.faze.kompletace).toMatchObject({ start: { den: '2026-10-14', zlomek: 1 }, konec: { den: '2026-10-15', zlomek: 1 } });
+
+    const r = naplanuj({ ...stav(zakazky, kazdyJinyPripravar), poradiFaze: { kompletace: ['B', 'A'] } });
+    expect(r.zakazky.B.faze.kompletace).toMatchObject({ start: { den: '2026-10-14', zlomek: 1 }, konec: { den: '2026-10-15', zlomek: 1 } });
+    expect(r.zakazky.A.faze.kompletace).toMatchObject({
+      start: { den: '2026-10-15', zlomek: 1 },
+      konec: { den: '2026-10-16', zlomek: 1 },
+      pripraveno: { den: UT, zlomek: 1 },
+    });
+    expect(r.zakazky.A.predpokladaneDokonceni).toEqual({ den: '2026-10-16', zlomek: 1 });
+  });
+
+  it('ve frontě jsou jen přiřazené zakázky s hodinami na dané fázi; neznámá čísla v ručním pořadí se ignorují', () => {
+    const r = naplanuj({
+      ...stav(
+        [zakazka('A', { stroj1Hod: 8 }), zakazka('B', { stroj1Hod: 8, kompletaceHod: 4 }), zakazka('C', { stroj2Hod: 8 })],
         [
           { zakazkaCislo: 'A', pripravarId: 'p1', poradi: 0 },
-          { zakazkaCislo: 'B', pripravarId: 'p2', poradi: 0 },
+          { zakazkaCislo: 'C', pripravarId: 'p2', poradi: 0 },
         ],
       ),
-    );
-    expect(r.zakazky.A.faze.stroj1).toEqual(r.zakazky.B.faze.stroj1);
+      poradiFaze: { stroj1: ['X', 'B', 'A', 'A'] },
+    });
+    expect(r.frontyFaze).toEqual({ stroj1: ['A'], stroj2: ['C'], stroj3: [], kompletace: [] });
+    expect(r.zakazky.B.faze).toEqual({});
+  });
+});
+
+describe('sestavFrontu', () => {
+  const k = (cislo: string, den: string, terminDokonceni = '2026-10-30') => ({ cislo, pripraveno: { den, zlomek: 1 }, terminDokonceni });
+
+  it('bez ručního pořadí řadí podle připravenosti, pak termínu dokončení a čísla', () => {
+    expect(sestavFrontu([], [k('C', '2026-10-14'), k('B', PO, '2026-10-20'), k('A', PO, '2026-10-25')])).toEqual(['B', 'A', 'C']);
+  });
+
+  it('nová zakázka se vloží před první zakázku, která je připravená později', () => {
+    const kandidati = [k('A', PO), k('C', '2026-10-16'), k('B', '2026-10-14')];
+    expect(sestavFrontu(['A', 'C'], kandidati)).toEqual(['A', 'B', 'C']);
+    // Ruční pořadí, které nejde podle připravenosti, zůstane; nová zakázka jde před první později připravenou.
+    expect(sestavFrontu(['C', 'A'], kandidati)).toEqual(['B', 'C', 'A']);
+    expect(sestavFrontu(['A', 'C'], [...kandidati, k('D', '2026-10-20')])).toEqual(['A', 'B', 'C', 'D']);
   });
 });
 

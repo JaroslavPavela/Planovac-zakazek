@@ -42,6 +42,7 @@ export function OrderDetail({ zakazka, rozvrh, nastaveni, pripravari, onZavrit }
             <th>Fáze</th>
             <th>Hodiny</th>
             <th>Hodin/den</th>
+            <th>Připraveno</th>
             <th>Start</th>
             <th>Konec</th>
           </tr>
@@ -55,6 +56,7 @@ export function OrderDetail({ zakazka, rozvrh, nastaveni, pripravari, onZavrit }
                 <td>{popisek(f)}</td>
                 <td>{formatHodiny(hodiny)}</td>
                 <td>{formatHodiny(hodDen(f))}</td>
+                <td>{r?.pripraveno ? formatPracovniCas(r.pripraveno, hodDen(f), 'd. M. yyyy') : '—'}</td>
                 <td>{r ? formatPracovniCas(r.start, hodDen(f), 'd. M. yyyy') : hodiny > 0 ? 'nepřiřazeno' : '—'}</td>
                 <td>{r ? formatPracovniCas(r.konec, hodDen(f), 'd. M. yyyy') : '—'}</td>
               </tr>

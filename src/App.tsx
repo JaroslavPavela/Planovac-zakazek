@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Board } from './ui/Board/Board';
+import { QueueBoard } from './ui/Board/QueueBoard';
 import { Capacity } from './ui/Capacity';
 import { GanttMachines } from './ui/Gantt/GanttMachines';
 import { GanttPreparers } from './ui/Gantt/GanttPreparers';
@@ -8,15 +9,19 @@ import { SettingsPanel } from './ui/SettingsPanel';
 import { TopBar } from './ui/TopBar';
 import { useRozvrh } from './ui/useRozvrh';
 import { dnesIso, usePlanStore } from './store/planStore';
+import { STROJE } from './domain/types';
+import type { NavazujiciFaze } from './domain/types';
 
-type Zalozka = 'tabule' | 'gantt-pripravari' | 'gantt-stroje' | 'vytizeni';
+type Zalozka = 'priprava' | 'stroje' | 'kompletace' | 'vytizeni';
 
 const ZALOZKY: { id: Zalozka; popisek: string }[] = [
-  { id: 'tabule', popisek: 'Tabule' },
-  { id: 'gantt-pripravari', popisek: 'Gantt přípraváři' },
-  { id: 'gantt-stroje', popisek: 'Gantt stroje' },
+  { id: 'priprava', popisek: 'Příprava' },
+  { id: 'stroje', popisek: 'Stroje' },
+  { id: 'kompletace', popisek: 'Kompletace' },
   { id: 'vytizeni', popisek: 'Vytížení' },
 ];
+
+const KOMPLETACE: readonly NavazujiciFaze[] = ['kompletace'];
 
 export function App() {
   const rozvrh = useRozvrh();
@@ -24,7 +29,7 @@ export function App() {
   const pripravari = usePlanStore((s) => s.pripravari);
   const prirazeni = usePlanStore((s) => s.prirazeni);
   const nastaveni = usePlanStore((s) => s.nastaveni);
-  const [zalozka, setZalozka] = useState<Zalozka>('tabule');
+  const [zalozka, setZalozka] = useState<Zalozka>('priprava');
   const [nastaveniOtevrene, setNastaveniOtevrene] = useState(false);
   const [zoom, setZoom] = useState<number | null>(null); // přiblížení Ganttů, null = přehled
 
@@ -63,9 +68,27 @@ export function App() {
           <p className="prazdne-uvod">Načtěte xlsx se zakázkami tlačítkem „Načíst xlsx“. Vzor je v souboru vzor/zakazky-vzor.xlsx.</p>
         ) : (
           <>
-            {sekce('tabule', <Board rozvrh={rozvrh} />)}
-            {sekce('gantt-pripravari', <GanttPreparers rozvrh={rozvrh} dnes={dnes} zoom={zoom} setZoom={setZoom} pocetDnu={osa.dny.length} />)}
-            {sekce('gantt-stroje', <GanttMachines rozvrh={rozvrh} dnes={dnes} zoom={zoom} setZoom={setZoom} pocetDnu={osa.dny.length} />)}
+            {sekce(
+              'priprava',
+              <div className="cast">
+                <GanttPreparers rozvrh={rozvrh} dnes={dnes} zoom={zoom} setZoom={setZoom} pocetDnu={osa.dny.length} />
+                <Board rozvrh={rozvrh} />
+              </div>,
+            )}
+            {sekce(
+              'stroje',
+              <div className="cast">
+                <GanttMachines radky={STROJE} rozvrh={rozvrh} dnes={dnes} zoom={zoom} setZoom={setZoom} pocetDnu={osa.dny.length} />
+                <QueueBoard faze={STROJE} rozvrh={rozvrh} />
+              </div>,
+            )}
+            {sekce(
+              'kompletace',
+              <div className="cast">
+                <GanttMachines radky={KOMPLETACE} rozvrh={rozvrh} dnes={dnes} zoom={zoom} setZoom={setZoom} pocetDnu={osa.dny.length} />
+                <QueueBoard faze={KOMPLETACE} rozvrh={rozvrh} />
+              </div>,
+            )}
             {sekce('vytizeni', <Capacity rozvrh={rozvrh} osa={osa} />)}
           </>
         )}

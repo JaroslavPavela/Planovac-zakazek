@@ -1,9 +1,10 @@
 // Import zakázek z xlsx podle sekce 2 specifikace. Čistá funkce nad obsahem souboru.
 
 import * as XLSX from 'xlsx';
-import type { Pripravar, Prirazeni, Zakazka } from '../domain/types';
+import { NAVAZUJICI_FAZE, prazdnePoradiFaze } from '../domain/types';
+import type { NavazujiciFaze, PoradiFaze, Pripravar, Prirazeni, Zakazka } from '../domain/types';
 import { dateNaIso, excelSerialNaIso, textNaIso } from './excelDatum';
-import { NAZVY_SLOUPCU, namapujSloupce } from './headers';
+import { NAZVY_SLOUPCU, SLOUPEC_PORADI_FAZE, namapujSloupce } from './headers';
 import type { KlicSloupce, MapaSloupcu } from './headers';
 
 export interface PreskocenyRadek {
@@ -23,6 +24,7 @@ export type VysledekImportu =
       ok: true;
       zakazky: Zakazka[];
       prirazeni: Prirazeni[];
+      poradiFaze: PoradiFaze; // ruční pořadí front strojů a kompletace (jen přiřazené zakázky)
       preskocene: PreskocenyRadek[];
       varovani: VarovaniImportu[];
       pocetRadku: number; // datové řádky (bez hlavičky a prázdných)
@@ -99,6 +101,24 @@ function sestavPrirazeni(radky: RadekPrirazeni[]): Prirazeni[] {
   return vysledek;
 }
 
+interface RadekPoradiFaze {
+  zakazkaCislo: string;
+  poradi: Partial<Record<NavazujiciFaze, number>>;
+  indexRadku: number;
+}
+
+/** Ruční pořadí front ze sloupců Pořadí Stroj 1–3 / Pořadí kompletace; zakázky bez hodnoty se zařadí podle připravenosti. */
+function sestavPoradiFaze(radky: RadekPoradiFaze[]): PoradiFaze {
+  const vysledek = prazdnePoradiFaze();
+  for (const faze of NAVAZUJICI_FAZE) {
+    vysledek[faze] = radky
+      .filter((r) => r.poradi[faze] !== undefined)
+      .sort((a, b) => a.poradi[faze]! - b.poradi[faze]! || a.indexRadku - b.indexRadku)
+      .map((r) => r.zakazkaCislo);
+  }
+  return vysledek;
+}
+
 /**
  * Načte první list sešitu. `pripravari` slouží k obnovení přiřazení podle názvu ve sloupci Přípravář.
  */
@@ -126,6 +146,7 @@ export function nactiRadky(radky: Bunka[][], pripravari: Pripravar[] = [], cislo
   const preskocene: PreskocenyRadek[] = [];
   const varovani: VarovaniImportu[] = [];
   const radkyPrirazeni: RadekPrirazeni[] = [];
+  const radkyPoradiFaze: RadekPoradiFaze[] = [];
   let pocetRadku = 0;
 
   const bunka = (radek: Bunka[], klic: KlicSloupce): Bunka => {
@@ -194,11 +215,22 @@ export function nactiRadky(radky: Bunka[][], pripravari: Pripravar[] = [], cislo
       const pripravarId = pripravarPodleNazvu.get(nazevPripravare.toLowerCase());
       if (pripravarId) {
         radkyPrirazeni.push({ zakazkaCislo: cislo, pripravarId, poradi: parsujPoradi(bunka(radek, 'poradi')), indexRadku: i });
+        const poradi: RadekPoradiFaze['poradi'] = {};
+        for (const faze of NAVAZUJICI_FAZE) poradi[faze] = parsujPoradi(bunka(radek, SLOUPEC_PORADI_FAZE[faze]));
+        radkyPoradiFaze.push({ zakazkaCislo: cislo, poradi, indexRadku: i });
       } else {
         varovani.push({ radek: cisloRadku, cislo, text: `Přípravář „${nazevPripravare}“ není v nastavení — zakázka je v zásobníku` });
       }
     }
   }
 
-  return { ok: true, zakazky, prirazeni: sestavPrirazeni(radkyPrirazeni), preskocene, varovani, pocetRadku };
+  return {
+    ok: true,
+    zakazky,
+    prirazeni: sestavPrirazeni(radkyPrirazeni),
+    poradiFaze: sestavPoradiFaze(radkyPoradiFaze),
+    preskocene,
+    varovani,
+    pocetRadku,
+  };
 }

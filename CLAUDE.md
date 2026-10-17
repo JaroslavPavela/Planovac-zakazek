@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Plánovač zakázek TPV
 
-Aplikace pro plánování zakázek v technické přípravě výroby: import xlsx, přiřazení zakázek šesti přípravářům (drag & drop), dopředný výpočet termínů fází (TPV → stroje → kompletace/ohýbání), Gantt přípravářů a strojů, vytížení, export xlsx. Jeden uživatel, bez serveru, offline.
+Aplikace pro plánování zakázek v technické přípravě výroby: import xlsx, přiřazení zakázek šesti přípravářům (drag & drop), dopředný výpočet termínů fází (TPV → stroje → kompletace/ohýbání) s frontami strojů a kompletace, Gantt a tabule pro každou část, vytížení, export xlsx. Jeden uživatel, bez serveru, offline.
 
 ## Zdroj pravdy
 - `SPECIFIKACE.md` — schválená specifikace (datový model, kalendář, plánovač, UI, struktura, fáze, akceptační testy). Řiď se jí. Pokud něco neřeší nebo si odporuje, **zeptej se** — nerozhoduj sám.
 
 ## Stav projektu
-- Fáze 1–6 schválené. Fáze 7 (závěrečná kontrola: testy, průchod import → návrh → přetažení → Gantty → export → zpětné načtení, porovnání 6 zakázek s ručním výpočtem) hotová 10. 10. 2026, čeká na schválení. Tím je MVP podle specifikace kompletní; další práce jen na vyžádání (sekce 12 specifikace, rozšíření mimo MVP).
+- Fáze 1–7 (MVP, specifikace 1.1) hotové; fáze 7 hotová 10. 10. 2026.
+- Verze 1.2 (17. 10. 2026): fronty strojů a kompletace + UI po částech Příprava · Stroje · Kompletace · Vytížení (Gantt a pod ním tabule), fáze 8–11 v sekci 10 specifikace. Fáze 8 (doména), 9 (store a xlsx), 10 (UI) a 11 (kontrola: testy, build, průchod import → návrh → přesuny v Přípravě, Stroji 1, Stroji 3 a Kompletaci → export → Vymazat vše → zpětné načtení, ruční přepočet 6 zakázek) hotové a schválené 17. 10. 2026. Verze 1.2 je kompletní; další práce jen na vyžádání.
 - Po dokončení každé fáze aktualizuj tuto sekci (která fáze je hotová a schválená).
 
 ## Způsob práce
@@ -33,15 +34,15 @@ TypeScript 5 · React 18 · Vite · Zustand (persist) · @dnd-kit · SheetJS (`x
 - `npm run vzor` — vygeneruje `vzor/zakazky-vzor.xlsx` (skript `scripts/vytvor-vzor.ts`)
 
 ## Architektura (tok dat)
-1. **Import** (`src/import`): xlsx → `Zakazka[]`. Hlavičky sloupců se normalizují (malá písmena, bez diakritiky, bez `[h]`) a párují s pevnými klíči, pořadí sloupců je libovolné. Import vždy **nahradí** zakázky i přiřazení, nastavení zůstává.
-2. **Store** (`src/store/planStore.ts`): Zustand + persist do `localStorage` (klíč `tpv-planovac-v1`). Persistuje se jen `StavAplikace` = `zakazky`, `pripravari`, `prirazeni`, `nastaveni`. Historie zpět/znovu se týká přiřazení.
+1. **Import** (`src/import`): xlsx → `Zakazka[]`. Hlavičky sloupců se normalizují (malá písmena, bez diakritiky, bez `[h]`) a párují s pevnými klíči, pořadí sloupců je libovolné. Import vždy **nahradí** zakázky, přiřazení i pořadí front strojů a kompletace, nastavení zůstává.
+2. **Store** (`src/store/planStore.ts`): Zustand + persist do `localStorage` (klíč `tpv-planovac-v1`). Persistuje se jen `StavAplikace` = `zakazky`, `pripravari`, `prirazeni`, `nastaveni`, `poradiFaze` (verze úložiště 3, starší stav převede `migrujUlozenyStav`). Historie zpět/znovu se týká přiřazení a ručního pořadí front.
 3. **Plánovač** (`src/domain/scheduler.ts`): čistá funkce `naplanuj(stav): Rozvrh`. Rozvrh se **nikdy neukládá**, vždy se přepočítá ze stavu (po každé změně přiřazení, nastavení nebo importu).
-4. **UI** (`src/ui`): Tabule (drag & drop), Gantty (vlastní SVG), Vytížení — vše jen čte `Rozvrh` a zapisuje změny do store.
-5. **Export** (`src/import/xlsxExport.ts`): stav + rozvrh → xlsx; výstup musí jít načíst zpět (sloupce Přípravář + Pořadí obnoví přiřazení).
+4. **UI** (`src/ui`): záložky Příprava · Stroje · Kompletace (v každé Gantt z vlastního SVG a pod ním tabule s drag & drop — `Board` pro přípraváře, `QueueBoard` pro fronty strojů a kompletace) a Vytížení — vše jen čte `Rozvrh` a zapisuje změny do store.
+5. **Export** (`src/import/xlsxExport.ts`): stav + rozvrh → xlsx; výstup musí jít načíst zpět (sloupce Přípravář + Pořadí obnoví přiřazení, Pořadí Stroj 1–3 / Pořadí kompletace pořadí front).
 
 Klíčové koncepty domény:
 - Čas v pracovním kalendáři je `PracovniCas { den: ISO, zlomek: 0–1 }`, ne hodiny. Délka fáze = `hodiny / hodDenZdroje`, takže fáze s různou kapacitou (přípravář 8 h/den, stroj třeba 16 h/den) na sebe navazují bez převodů.
-- Řetězec fází jedné zakázky: TPV (sekvenčně ve frontě přípraváře) → stroje **paralelně** (nezávisle na ostatních zakázkách, kolize se neřeší) → kompletace po nejdelším stroji. Fáze s 0 h se do rozvrhu nezapisuje.
+- Řetězec fází jedné zakázky: TPV (sekvenčně ve frontě přípraváře) → stroje (stroje jedné zakázky paralelně) → kompletace po nejdelším stroji. Každý stroj i kompletace má vlastní frontu (sekce 5.7): jedna zakázka po druhé, ruční pořadí `poradiFaze` je závazné (pracoviště čeká), zakázky mimo ruční pořadí se vkládají podle připravenosti. Fáze s 0 h se do rozvrhu nezapisuje.
 - Kalendář: po–pá bez českých státních svátků, Velikonoce výpočtem, žádná externí data.
 - Stav zakázky (`ok` / `ohrozeno` / `pozde` / `neprirazeno`) se odvozuje z dne dokončení vs. termín − rezerva; dokončení v den termínu je stihnuto.
 

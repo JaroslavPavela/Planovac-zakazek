@@ -1,8 +1,8 @@
 # Specifikace — Plánovač zakázek TPV
 
-Verze 1.1 · schváleno 9. 10. 2026 · 10. 10. 2026 přejmenovány stroje na Stroj 1–3 (dříve frézka 1, frézka 2, vysekávačka), import přijímá i staré hlavičky; názvy strojů editovatelné v nastavení · stav: implementováno
+Verze 1.2 · schváleno 9. 10. 2026 · 10. 10. 2026 přejmenovány stroje na Stroj 1–3 (dříve frézka 1, frézka 2, vysekávačka), import přijímá i staré hlavičky; názvy strojů editovatelné v nastavení · 17. 10. 2026 fronty strojů a kompletace (jedna zakázka po druhé, ruční pořadí), UI po částech Příprava · Stroje · Kompletace · stav: verze 1.2 implementována (fáze 8–11)
 
-Aplikace pro plánování zakázek v technické přípravě výroby (TPV). Načte xlsx se zakázkami, umožní je přiřadit šesti přípravářům (drag & drop), dopředně spočítá termíny všech fází (TPV → stroje → kompletace/ohýbání), zobrazí Gantt přípravářů i strojů a vytížení po týdnech, a plán exportuje do xlsx. Jeden uživatel, bez serveru, plně offline.
+Aplikace pro plánování zakázek v technické přípravě výroby (TPV). Načte xlsx se zakázkami, umožní je přiřadit šesti přípravářům (drag & drop), dopředně spočítá termíny všech fází (TPV → stroje → kompletace/ohýbání) — stroje i kompletace zpracovávají zakázky postupně ve frontách s ručně upravitelným pořadím, zobrazí Gantt a tabuli pro každou část (příprava, stroje, kompletace) a vytížení po týdnech, a plán exportuje do xlsx. Jeden uživatel, bez serveru, plně offline.
 
 ---
 
@@ -13,15 +13,15 @@ Aplikace pro plánování zakázek v technické přípravě výroby (TPV). Načt
 | Jednotky | všechny doby v hodinách (h); TPV = hodiny přípraváře, stroje = strojní hodiny |
 | Vstup | xlsx, 1 řádek = 1 zakázka; každé načtení **nahradí** celá data |
 | Přípraváři | 6, názvy editovatelné; kapacita 8 h/den; po–pá; bez českých státních svátků |
-| Stroje | stroj 1, stroj 2, stroj 3 — běží **paralelně** po TPV; **hodiny/den každého stroje nastavitelné** v aplikaci (výchozí 8) |
-| Kompletace / ohýbání | po skončení nejdelší strojní fáze; hodiny/den rovněž nastavitelné (výchozí 8) |
-| Kolize strojů | **neřeší se** (stroje jsou jen navazující fáze); překryvy se pouze zobrazí v Ganttu strojů |
+| Stroje | stroj 1, stroj 2, stroj 3 — stroje jedné zakázky běží **paralelně** po TPV; **hodiny/den každého stroje nastavitelné** v aplikaci (výchozí 8) |
+| Kompletace / ohýbání | jedno pracoviště; po skončení nejdelší strojní fáze zakázky; hodiny/den rovněž nastavitelné (výchozí 8) |
+| Fronty strojů a kompletace | každý stroj i kompletace zpracovává **jednu zakázku po druhé** ve své frontě (5.7); pořadí je závazné — když další zakázka ještě není připravená, pracoviště **čeká**; pořadí se upravuje ručně drag & drop, nově zařazené zakázky jdou podle připravenosti |
 | Fronta | 1 zakázka = 1 přípravář; přípravář pracuje sekvenčně |
 | Plánování | dopředné od začátku plánu; varování při ohrožení termínu |
 | Pořadí | výchozí podle termínu dokončení; ruční úprava drag & drop |
 | Stav zakázek | pouze plán (bez sledování rozpracovanosti) |
 | Nepřítomnosti | v MVP **vynechány** (možné rozšíření) |
-| Výstup | Gantt přípravářů, Gantt strojů, vytížení, export xlsx, tisk |
+| Výstup | Gantt + tabule pro přípravu, stroje a kompletaci, vytížení, export xlsx, tisk |
 | Provoz | jeden uživatel, bez serveru, offline, desítky zakázek, horizont ~1 měsíc |
 
 ---
@@ -44,9 +44,11 @@ Aplikace pro plánování zakázek v technické přípravě výroby (TPV). Načt
 | Termín dokončení | datum | ano | |
 | Přípravář | text | ne | jen v souboru exportovaném z aplikace — obnoví přiřazení |
 | Pořadí | číslo | ne | jen v exportu — pořadí ve frontě přípraváře |
+| Pořadí Stroj 1 / Pořadí Stroj 2 / Pořadí Stroj 3 | číslo | ne | jen v exportu — pořadí ve frontě stroje |
+| Pořadí kompletace | číslo | ne | jen v exportu — pořadí ve frontě kompletace |
 
 ### 2.2 Párování sloupců
-Název hlavičky se normalizuje: malá písmena, odstranění diakritiky, sloučení mezer, odstranění `[h]`. Porovnává se s klíči: `cislo zakazky`, `nazev`, `firma`, `tpv`, `stroj 1`, `stroj 2`, `stroj 3`, `kompletace`, `termin zadani`, `termin dokonceni`, `pripravar`, `poradi`. Pořadí sloupců v souboru je libovolné.
+Název hlavičky se normalizuje: malá písmena, odstranění diakritiky, sloučení mezer, odstranění `[h]`. Porovnává se s klíči: `cislo zakazky`, `nazev`, `firma`, `tpv`, `stroj 1`, `stroj 2`, `stroj 3`, `kompletace`, `termin zadani`, `termin dokonceni`, `pripravar`, `poradi`, `poradi stroj 1`, `poradi stroj 2`, `poradi stroj 3`, `poradi kompletace`. Pořadí sloupců v souboru je libovolné.
 
 ### 2.3 Formáty hodnot
 - Datum: excelové datum (sériové číslo), JS Date, nebo text `15.10.2026` / `2026-10-15`.
@@ -60,7 +62,7 @@ Název hlavičky se normalizuje: malá písmena, odstranění diakritiky, slouč
 
 ### 2.5 Chování při importu
 1. Potvrzovací dialog („Načtení nahradí všechna aktuální data").
-2. Zakázky i přiřazení se nahradí. Pokud soubor obsahuje sloupce Přípravář + Pořadí a název přípraváře odpovídá některému v nastavení, přiřazení se obnoví; jinak je zakázka v zásobníku (s varováním).
+2. Zakázky, přiřazení i pořadí front strojů a kompletace se nahradí. Pokud soubor obsahuje sloupce Přípravář + Pořadí a název přípraváře odpovídá některému v nastavení, přiřazení se obnoví; jinak je zakázka v zásobníku (s varováním). Sloupce Pořadí Stroj 1–3 / Pořadí kompletace obnoví ruční pořadí front (zakázky bez hodnoty se zařadí podle připravenosti, 5.7).
 3. Nastavení (názvy přípravářů, hodiny/den strojů, rezerva) se **zachovává**.
 4. Po importu se zobrazí panel nastavení strojů (hodiny/den), aby šly hodnoty hned doplnit.
 
@@ -75,6 +77,8 @@ Název hlavičky se normalizuje: malá písmena, odstranění diakritiky, slouč
 // src/domain/types.ts
 export type StrojId = 'stroj1' | 'stroj2' | 'stroj3';
 export type FazeId = 'tpv' | StrojId | 'kompletace';
+export type NavazujiciFaze = StrojId | 'kompletace';      // fáze s vlastní frontou (5.7)
+export type PoradiFaze = Record<NavazujiciFaze, string[]>; // fáze → čísla zakázek v pořadí fronty
 
 export interface Zakazka {
   cislo: string;
@@ -111,7 +115,12 @@ export interface Nastaveni {
 /** Okamžik v pracovním kalendáři: pracovní den + zlomek dne 0–1 (nezávislý na hodinách/den zdroje). */
 export interface PracovniCas { den: string; zlomek: number; }
 
-export interface FazeRozvrh { start: PracovniCas; konec: PracovniCas; hodiny: number; }
+export interface FazeRozvrh {
+  start: PracovniCas;
+  konec: PracovniCas;
+  hodiny: number;
+  pripraveno?: PracovniCas;  // jen stroje a kompletace: konec předchozí fáze; start > pripraveno = čekání ve frontě
+}
 
 export type Stav = 'ok' | 'ohrozeno' | 'pozde' | 'neprirazeno';
 
@@ -129,6 +138,7 @@ export interface Rozvrh {
   zakazky: Record<string, RozvrhZakazky>;
   konecFronty: Record<string, PracovniCas>;             // per přípravář
   vytizeni: Record<string, Record<string, number>>;     // přípravář → ISO týden ('2026-W42') → přidělené hodiny TPV
+  frontyFaze: PoradiFaze;                               // výsledné pořadí front strojů a kompletace (5.7)
 }
 
 export interface StavAplikace {
@@ -136,6 +146,7 @@ export interface StavAplikace {
   pripravari: Pripravar[];
   prirazeni: Prirazeni[];
   nastaveni: Nastaveni;
+  poradiFaze?: Partial<PoradiFaze>;  // ruční pořadí front strojů a kompletace; chybějící/prázdná fronta = automaticky podle připravenosti
 }
 ```
 
@@ -169,9 +180,9 @@ Pro každého přípraváře vezmi jeho přiřazení seřazená podle `poradi`, 
 
 1. `startTpv = max(kurzor, { naPracovniDen(max(terminZadani, zacatekPlanu)), 0 })`
 2. `konecTpv = pridejHodiny(startTpv, tpvHod, hodDenPripravar)`; `kurzor = konecTpv`
-3. Pro každý stroj s hodinami > 0: `start = konecTpv`, `konec = pridejHodiny(konecTpv, hod, hodDenStroj[stroj])` (paralelně, nezávisle na ostatních zakázkách)
+3. Stroje s hodinami > 0 se plánují ve frontách strojů (5.7), připravenost = `konecTpv`; stroje jedné zakázky běží paralelně
 4. `konecStroju = max(konce strojů)`; bez strojů = `konecTpv`
-5. Kompletace (pokud > 0): `start = konecStroju`, `konec = pridejHodiny(konecStroju, kompletaceHod, hodDenStroj.kompletace)`
+5. Kompletace (pokud > 0) se plánuje ve frontě kompletace (5.7), připravenost = `konecStroju`
 6. `predpokladaneDokonceni = konec kompletace` (resp. `konecStroju`, resp. `konecTpv`)
 
 ### 5.2 Stav zakázky
@@ -187,6 +198,8 @@ Zpětně od `{ terminDokonceni, zlomek: 1 }`:
 1. odečti kompletaci (rychlost kompletace)
 2. pro každý stroj s hodinami > 0 odečti jeho hodiny jeho rychlostí → vezmi **nejdřívější** výsledek (nejdelší stroj)
 3. odečti TPV (rychlost přípraváře) → `nejpozdejsiStartTpv`
+
+Výpočet je teoretický — nepočítá s čekáním ve frontách strojů a kompletace.
 `nestihnutelne = nejpozdejsiStartTpv < max(zacatekPlanu, terminZadani)`
 
 ### 5.4 Vytížení
@@ -203,11 +216,25 @@ Výsledek je návrh — uživatel dál upravuje přetahováním. Akce je vratná
 ### 5.6 Seřadit frontu podle termínu
 U přípraváře přečísluje `poradi` podle termínu dokončení (sekundárně termín zadání).
 
+### 5.7 Fronty strojů a kompletace
+Po naplánování TPV všech přípravářů se plánují fronty stroj 1, stroj 2, stroj 3 a nakonec kompletace (každá je jedno pracoviště).
+1. Do fronty patří jen **přiřazené** zakázky s hodinami > 0 na dané fázi.
+2. **Připravenost** zakázky: u stroje `konecTpv`, u kompletace `konecStroju` (5.1).
+3. **Výsledné pořadí fronty**: ruční pořadí `poradiFaze[faze]` zúžené na zakázky, které do fronty patří (neznámá a duplicitní čísla se vynechají). Ostatní zakázky se vloží podle připravenosti (při shodě termín dokončení, pak číslo) — každá **před první zakázku ve frontě, která je připravená později**, jinak na konec. Prázdné ruční pořadí = celá fronta podle připravenosti.
+4. Kurzor fronty = `{ naPracovniDen(zacatekPlanu), 0 }`; pro každou zakázku v pořadí: `start = max(kurzor, pripraveno)`, `konec = pridejHodiny(start, hod, hodDenStroj[faze])`, `kurzor = konec`. Pořadí je závazné: když další zakázka ještě není připravená, pracoviště čeká (vznikne mezera).
+5. Do rozvrhu se u fáze ukládá i `pripraveno`; `start > pripraveno` = zakázka čekala ve frontě. `Rozvrh.frontyFaze` obsahuje výsledné pořadí všech front.
+
+Úpravy ručního pořadí (store):
+- Přetažení ve frontě uloží celou výslednou frontu s přesunutou zakázkou jako ruční pořadí fáze (`presunVeFronteFaze`).
+- „Seřadit podle připravenosti" vyprázdní ruční pořadí fáze.
+- Vrácení zakázky do zásobníku ji odebere z ručního pořadí všech front (`odeberZFrontFaze`) — při dalším přiřazení se zařadí podle připravenosti.
+- Změny ručního pořadí patří do historie zpět/znovu spolu s přiřazeními.
+
 ---
 
 ## 6. Uživatelské rozhraní
 
-Jedna stránka, horní lišta + záložky (nebo sekce pod sebou): **Tabule · Gantt přípraváři · Gantt stroje · Vytížení**. Jazyk UI: čeština. Formát data `d. M. yyyy`, hodiny s desetinnou čárkou.
+Jedna stránka, horní lišta + záložky: **Příprava · Stroje · Kompletace · Vytížení**. V každé ze záložek Příprava, Stroje, Kompletace je nahoře Gantt dané části a pod ním tabule pro ruční přesun zakázek. Jazyk UI: čeština. Formát data `d. M. yyyy`, hodiny s desetinnou čárkou.
 
 ### 6.1 Horní lišta
 - **Načíst xlsx** (file input) · **Export xlsx** · **Tisk**
@@ -216,43 +243,50 @@ Jedna stránka, horní lišta + záložky (nebo sekce pod sebou): **Tabule · Ga
 - **Navrhnout rozdělení** · **Zpět / Znovu** (historie změn přiřazení) · **Vymazat vše**
 - Souhrn: počet zakázek, přiřazeno / v zásobníku, počet pozdě / ohroženo
 
-### 6.2 Tabule (hlavní obrazovka)
+### 6.2 Záložka Příprava — tabule přípravářů (pod Ganttem přípravářů 6.3)
 - Vlevo **Zásobník**: nepřiřazené zakázky seřazené podle termínu dokončení. Karta: číslo + název (tučně), firma, hodiny (TPV · S1 · S2 · S3 · K), termín dokončení, **nejpozdější start TPV**; červený štítek „nestihnutelné".
 - Vpravo **6 sloupců přípravářů**: hlavička (název, součet hodin TPV, datum konce fronty, tlačítko „Seřadit podle termínu"), karty v pořadí fronty se spočítaným startem a koncem TPV a předpokládaným dokončením; barevný pruh podle stavu (ok zelená, ohroženo oranžová, pozdě červená).
 - **Drag & drop** (@dnd-kit): zásobník → sloupec, sloupec → sloupec, přeuspořádání ve sloupci, karta → zásobník (odebrání přiřazení). Po každé změně okamžitý přepočet.
 - Klik na kartu → detail zakázky (všechny fáze se start/konec, termíny, stav).
 
-### 6.3 Gantt přípravářů (SVG)
+### 6.3 Gantt přípravářů (SVG, záložka Příprava)
 - Řádky = přípraváři; osa X = kalendářní dny, hlavička měsíc + ISO týden + den; šířka dne ~28 px, vodorovný posun; horizont od začátku plánu po max(konec poslední fáze, nejzazší termín) + 3 dny, minimálně 5 týdnů.
 - Víkendy a svátky šedě podbarvené; svislá čára „dnes"; čára „začátek plánu".
 - Pruh = fáze TPV zakázky (start→konec vč. zlomků dne), barva podle stavu, popisek číslo zakázky; značka (kosočtverec) termínu dokončení ve stejném řádku; tooltip s detaily.
 - Volitelné zobrazení navazujících fází (stroje, kompletace) ve stejném řádku světlejším odstínem (přepínač).
 
-### 6.4 Gantt strojů (SVG)
-- Řádky: stroj 1, stroj 2, stroj 3, kompletace / ohýbání.
-- Pruhy fází všech zakázek; v jednom řádku se překrývající intervaly rozloží do dalších drah (hladové přiřazení drah), překrývající se úseky mají zvýrazněný okraj → vidět úzká místa, přestože plán kolize neřeší.
-- Stejná osa, posun a tooltipy jako 6.3.
+### 6.4 Gantt strojů a Gantt kompletace (SVG)
+- Záložka Stroje: řádky stroj 1, stroj 2, stroj 3. Záložka Kompletace: jeden řádek kompletace / ohýbání.
+- Pruhy fází zakázek v pořadí fronty (5.7) — v řádku se nepřekrývají; barva podle stavu, popisek číslo zakázky (hodiny); čekání ve frontě (`pripraveno` → `start`) jako tenká přerušovaná čára před pruhem.
+- Stejná osa, posun, přiblížení a tooltipy jako 6.3.
+
+### 6.7 Tabule strojů a kompletace (pod Ganttem 6.4)
+- Záložka Stroje: 3 sloupce (stroj 1–3); záložka Kompletace: 1 sloupec přes celou šířku s kartami v mřížce (pořadí zleva doprava, shora dolů). Bez zásobníku.
+- Hlavička sloupce: název, počet zakázek a součet hodin, konec fronty, druh pořadí (ruční / podle připravenosti), tlačítko „Seřadit podle připravenosti" (5.7).
+- Karta v pořadí fronty: pořadové číslo ve frontě, číslo + název, firma, hodiny fáze, připraveno, start → konec fáze, štítek „čeká ve frontě" (pokud start > připraveno), předpokládané dokončení, termín dokončení; barevný pruh podle stavu.
+- **Drag & drop** jen v rámci sloupce (hodiny patří konkrétnímu stroji). Po změně okamžitý přepočet; vratné (Zpět / Znovu).
+- Klik na kartu → detail zakázky (6.2); tabulka fází v detailu má i sloupec Připraveno.
 
 ### 6.5 Vytížení
 - Tabulka přípravář × ISO týden: `přidělené h / dostupné h (xx %)`; podbarvení: < 80 % zelená, 80–100 % oranžová, > 100 % červená; řádek součtu za všechny přípraváře.
 - Dostupné hodiny zohledňují svátky (méně pracovních dnů v týdnu).
 
 ### 6.6 Tisk
-`@media print`: skrýt ovládací prvky, každá sekce na novou stránku, na šířku, Gantty bez posuvníku v plné šířce (zmenšení měřítka dne).
+`@media print`: skrýt ovládací prvky, každá sekce (Příprava, Stroje, Kompletace, Vytížení) na novou stránku, na šířku, Gantty bez posuvníku v plné šířce (zmenšení měřítka dne).
 
 ---
 
 ## 7. Perzistence a export
 
 ### 7.1 Lokální stav
-- Zustand store + `persist` do `localStorage` (klíč `tpv-planovac-v1`): `zakazky`, `pripravari`, `prirazeni`, `nastaveni`. Rozvrh se nepersistuje, vždy se počítá.
+- Zustand store + `persist` do `localStorage` (klíč `tpv-planovac-v1`): `zakazky`, `pripravari`, `prirazeni`, `nastaveni`, `poradiFaze`. Rozvrh se nepersistuje, vždy se počítá. Verze uloženého stavu 3 (přidáno `poradiFaze`); starší stav se převede s prázdným ručním pořadím front.
 - Při startu se stav obnoví; tlačítko „Vymazat vše" s potvrzením.
 
 ### 7.2 Export xlsx (`src/import/xlsxExport.ts`)
-- List **Plán**: sloupce vstupu (2.1) + `Přípravář`, `Pořadí`, `TPV start`, `TPV konec`, `Stroj 1 start/konec`, `Stroj 2 start/konec`, `Stroj 3 start/konec`, `Kompletace start/konec`, `Předpokládané dokončení`, `Termín dokončení`, `Stav`, `Nejpozdější start TPV`. Data jako skutečná excelová data; zlomek dne jako datum + čas (8 h/den → 0,5 = 12:00 pro přípraváře; pro stroje podle jejich hodin/den).
+- List **Plán**: sloupce vstupu (2.1) + `Přípravář`, `Pořadí`, `Pořadí Stroj 1`, `Pořadí Stroj 2`, `Pořadí Stroj 3`, `Pořadí kompletace` (pořadí ve výsledné frontě, 0, 1, 2 …; prázdné, když zakázka ve frontě není), `TPV start`, `TPV konec`, `Stroj 1 start/konec`, `Stroj 2 start/konec`, `Stroj 3 start/konec`, `Kompletace start/konec`, `Předpokládané dokončení`, `Termín dokončení`, `Stav`, `Nejpozdější start TPV`. Data jako skutečná excelová data; zlomek dne jako datum + čas (8 h/den → 0,5 = 12:00 pro přípraváře; pro stroje podle jejich hodin/den).
 - List **Vytížení**: tabulka ze sekce 6.5.
 - List **Nastavení**: začátek plánu, rezerva, hodiny/den.
-- Soubor jde načíst zpět (sloupce Přípravář + Pořadí obnoví přiřazení).
+- Soubor jde načíst zpět (sloupce Přípravář + Pořadí obnoví přiřazení, sloupce Pořadí Stroj 1–3 / Pořadí kompletace pořadí front).
 - Název souboru: `plan-zakazek-YYYY-MM-DD.xlsx`.
 
 ### 7.3 Záloha JSON (bonus)
@@ -299,8 +333,8 @@ Planovani zakazek TPV/
       planStore.ts               (Zustand, persist, historie zpět/znovu)
     ui/
       TopBar.tsx · SettingsPanel.tsx · ImportSummary.tsx
-      Board/ Backlog.tsx · PreparerColumn.tsx · OrderCard.tsx · OrderDetail.tsx
-      Gantt/ GanttAxis.tsx · GanttPreparers.tsx · GanttMachines.tsx · lanes.ts
+      Board/ Backlog.tsx · PreparerColumn.tsx · OrderCard.tsx · OrderDetail.tsx · QueueBoard.tsx · QueueColumn.tsx (tabule strojů / kompletace)
+      Gantt/ GanttAxis.tsx · GanttPreparers.tsx · GanttMachines.tsx (řádky stroje nebo kompletace) · lanes.ts
       Capacity.tsx
   scripts/vytvor-vzor.ts         (generuje vzor/zakazky-vzor.xlsx)
   vzor/zakazky-vzor.xlsx
@@ -324,6 +358,13 @@ Po každé fázi zastavit, shrnout výsledek a čekat na schválení.
 6. **Build a dokumentace** — jednosouborový HTML, README, kontrola z `file://` offline.
 7. **Kontrola** — všechny testy, ruční průchod se vzorovými daty (import → navrhnout → přetáhnout → Gantt → export → znovu načíst export), porovnání několika spočítaných termínů s ručním výpočtem.
 
+Verze 1.2 (fronty strojů a kompletace, UI po částech):
+
+8. **Doména** — úprava specifikace, plánovač s frontami (5.7), operace s ručním pořadím front, testy.
+9. **Store a xlsx** — `poradiFaze` ve store, persist verze 3 s migrací, historie zpět/znovu, export / import sloupců pořadí front, testy.
+10. **UI** — záložky Příprava · Stroje · Kompletace · Vytížení, Gantt + tabule v každé části, drag & drop ve frontách, tisk.
+11. **Kontrola** — testy, build, ruční průchod (import → přiřazení → přesun ve frontě stroje a kompletace → export → zpětné načtení).
+
 ---
 
 ## 11. Akceptační kritéria a testy
@@ -335,6 +376,10 @@ Po každé fázi zastavit, shrnout výsledek a čekat na schválení.
 - Stroj 16 h/den, 8 h práce → 0,5 dne; stroj 8 h/den, 8 h → 1 den.
 - Tři stroje paralelně: kompletace začíná po nejdelším z nich.
 - Zakázka s nulovými stroji: kompletace navazuje přímo na TPV.
+- Dvě zakázky na stejném stroji se nepřekrývají; výchozí pořadí fronty podle připravenosti.
+- Ruční pořadí fronty stroje určí, která zakázka jde první; stroj čeká na zakázku dřív ve frontě, i když ještě nemá hotové TPV.
+- Kompletace čeká na nejdelší stroj zakázky i na předchozí zakázku ve frontě kompletace.
+- Ve frontě jsou jen přiřazené zakázky s hodinami na fázi; nová zakázka se zařadí před první později připravenou.
 - `startTpv` nikdy před termínem zadání ani před začátkem plánu.
 - Stav: dokončení v den termínu = `ok` (při rezervě 0); s rezervou 1 den = `ohrozeno`; den po termínu = `pozde`.
 - Nejpozdější start TPV: zpětný výpočet je inverzí dopředného (start → konec → zpět = start).
@@ -348,10 +393,10 @@ Po každé fázi zastavit, shrnout výsledek a čekat na schválení.
 - Datum ze sériového čísla, z textu `15.10.2026` i `2026-10-15`.
 - `1,5` → 1.5; prázdné hodiny → 0.
 - Chybějící povinný sloupec → chyba, nic se nenačte; vadný řádek → přeskočen a vypsán.
-- Export → import obnoví přiřazení a pořadí beze změny.
+- Export → import obnoví přiřazení, pořadí i pořadí front strojů a kompletace beze změny.
 
 ### UI / provoz
-- Drag & drop funguje ve všech směrech (zásobník ↔ sloupce, v rámci sloupce); po změně se vše přepočítá.
+- Drag & drop funguje ve všech směrech (zásobník ↔ sloupce, v rámci sloupce); ve frontách strojů a kompletace v rámci sloupce; po změně se vše přepočítá.
 - Jednosouborový HTML otevřený dvojklikem (file://) bez internetu: import, plánování, Gantty, export fungují.
 - Stav přežije zavření a otevření prohlížeče.
 
@@ -359,7 +404,7 @@ Po každé fázi zastavit, shrnout výsledek a čekat na schválení.
 
 ## 12. Možná rozšíření (mimo MVP)
 - Nepřítomnosti přípravářů (dovolená, nemoc) v kalendáři.
-- Kapacitní plánování strojů (jeden stroj = jedna zakázka v čase, fronty strojů).
+- ~~Kapacitní plánování strojů (jeden stroj = jedna zakázka v čase, fronty strojů)~~ — zařazeno do verze 1.2 (5.7).
 - Sledování stavu zakázek a skutečných hodin.
 - Backend (Node + DB) pro více uživatelů; přímé napojení na ERP (SQL) místo xlsx.
 - Zpětné plánování (just-in-time) jako alternativní režim.

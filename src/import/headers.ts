@@ -1,5 +1,7 @@
 // Normalizace a mapování hlaviček xlsx podle sekce 2.2 specifikace.
 
+import type { NavazujiciFaze } from '../domain/types';
+
 export type KlicSloupce =
   | 'cislo zakazky'
   | 'nazev'
@@ -12,7 +14,11 @@ export type KlicSloupce =
   | 'termin zadani'
   | 'termin dokonceni'
   | 'pripravar'
-  | 'poradi';
+  | 'poradi'
+  | 'poradi stroj 1'
+  | 'poradi stroj 2'
+  | 'poradi stroj 3'
+  | 'poradi kompletace';
 
 export const POVINNE_SLOUPCE: readonly KlicSloupce[] = [
   'cislo zakazky',
@@ -27,7 +33,22 @@ export const POVINNE_SLOUPCE: readonly KlicSloupce[] = [
   'termin dokonceni',
 ];
 
-export const VOLITELNE_SLOUPCE: readonly KlicSloupce[] = ['pripravar', 'poradi'];
+export const VOLITELNE_SLOUPCE: readonly KlicSloupce[] = [
+  'pripravar',
+  'poradi',
+  'poradi stroj 1',
+  'poradi stroj 2',
+  'poradi stroj 3',
+  'poradi kompletace',
+];
+
+/** Sloupec s pořadím ve frontě stroje / kompletace (5.7). */
+export const SLOUPEC_PORADI_FAZE: Record<NavazujiciFaze, KlicSloupce> = {
+  stroj1: 'poradi stroj 1',
+  stroj2: 'poradi stroj 2',
+  stroj3: 'poradi stroj 3',
+  kompletace: 'poradi kompletace',
+};
 
 /** Názvy hlaviček pro export a vzor (klíč → text s diakritikou). */
 export const NAZVY_SLOUPCU: Record<KlicSloupce, string> = {
@@ -43,6 +64,10 @@ export const NAZVY_SLOUPCU: Record<KlicSloupce, string> = {
   'termin dokonceni': 'Termín dokončení',
   pripravar: 'Přípravář',
   poradi: 'Pořadí',
+  'poradi stroj 1': 'Pořadí Stroj 1',
+  'poradi stroj 2': 'Pořadí Stroj 2',
+  'poradi stroj 3': 'Pořadí Stroj 3',
+  'poradi kompletace': 'Pořadí kompletace',
 };
 
 export function odstranDiakritiku(text: string): string {

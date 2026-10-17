@@ -1,14 +1,13 @@
 // Dopředný plánovač podle sekce 5 specifikace — čistá funkce naplanuj(stav): Rozvrh.
 
-import { dalsiPracovniDen, isoTyden, jePracovniDen, max, naPracovniDen, pracovniDnyVTydnu, pridejHodiny } from './calendar';
+import { dalsiPracovniDen, isoTyden, jePracovniDen, max, naPracovniDen, porovnej, pracovniDnyVTydnu, pridejHodiny } from './calendar';
 import { nejpozdejsiStart, urciStav } from './risk';
-import { STROJE, hodinyFaze } from './types';
-import type { FazeId, FazeRozvrh, Nastaveni, PracovniCas, Rozvrh, RozvrhZakazky, StavAplikace, Zakazka } from './types';
+import { FAZE, NAVAZUJICI_FAZE, STROJE, hodinyFaze, prazdnePoradiFaze } from './types';
+import type { FazeId, FazeRozvrh, NavazujiciFaze, Nastaveni, PracovniCas, Rozvrh, RozvrhZakazky, StavAplikace, Zakazka } from './types';
 
-export interface RozvrhFazi {
-  faze: Partial<Record<FazeId, FazeRozvrh>>;
+export interface PlanTpv {
+  tpv?: FazeRozvrh; // jen při TPV > 0
   konecTpv: PracovniCas;
-  predpokladaneDokonceni: PracovniCas;
 }
 
 /** Začátek fronty: první pracovní den od začátku plánu. */
@@ -16,34 +15,39 @@ export function zacatekFronty(nastaveni: Nastaveni): PracovniCas {
   return { den: naPracovniDen(nastaveni.zacatekPlanu), zlomek: 0 };
 }
 
-/** Naplánuje fáze jedné zakázky od kurzoru přípraváře (5.1, kroky 1–6). */
-export function naplanujZakazku(zakazka: Zakazka, kurzor: PracovniCas, nastaveni: Nastaveni): RozvrhFazi {
+/** Naplánuje TPV zakázky od kurzoru přípraváře (5.1, kroky 1–2). */
+export function naplanujTpv(zakazka: Zakazka, kurzor: PracovniCas, nastaveni: Nastaveni): PlanTpv {
   const nejdrivejsiDen =
     zakazka.terminZadani > nastaveni.zacatekPlanu ? zakazka.terminZadani : nastaveni.zacatekPlanu;
   const startTpv = max(kurzor, { den: naPracovniDen(nejdrivejsiDen), zlomek: 0 });
   const konecTpv = pridejHodiny(startTpv, zakazka.tpvHod, nastaveni.hodDenPripravar);
+  return zakazka.tpvHod > 0 ? { tpv: { start: startTpv, konec: konecTpv, hodiny: zakazka.tpvHod }, konecTpv } : { konecTpv };
+}
 
-  const faze: Partial<Record<FazeId, FazeRozvrh>> = {};
-  if (zakazka.tpvHod > 0) faze.tpv = { start: startTpv, konec: konecTpv, hodiny: zakazka.tpvHod };
+export interface KandidatFronty {
+  cislo: string;
+  pripraveno: PracovniCas;
+  terminDokonceni: string;
+}
 
-  let konecStroju = konecTpv;
-  for (const stroj of STROJE) {
-    const hod = hodinyFaze(zakazka, stroj);
-    if (hod > 0) {
-      const konec = pridejHodiny(konecTpv, hod, nastaveni.hodDenStroj[stroj]);
-      faze[stroj] = { start: konecTpv, konec, hodiny: hod };
-      konecStroju = max(konecStroju, konec);
-    }
+function podlePripravenosti(a: KandidatFronty, b: KandidatFronty): number {
+  return porovnej(a.pripraveno, b.pripraveno) || a.terminDokonceni.localeCompare(b.terminDokonceni) || a.cislo.localeCompare(b.cislo);
+}
+
+/**
+ * Výsledné pořadí fronty stroje / kompletace (5.7): ruční pořadí zakázek, které do fronty patří (ostatní se vynechají);
+ * zakázky v ručním pořadí chybějící se vloží podle připravenosti — před první zakázku, která je připravená později.
+ */
+export function sestavFrontu(rucni: readonly string[], kandidati: readonly KandidatFronty[]): string[] {
+  const podleCisla = new Map(kandidati.map((k) => [k.cislo, k]));
+  const fronta = [...new Set(rucni.filter((c) => podleCisla.has(c)))];
+  const zarazene = new Set(fronta);
+  const nove = kandidati.filter((k) => !zarazene.has(k.cislo)).sort(podlePripravenosti);
+  for (const k of nove) {
+    const pozice = fronta.findIndex((c) => porovnej(podleCisla.get(c)!.pripraveno, k.pripraveno) > 0);
+    fronta.splice(pozice < 0 ? fronta.length : pozice, 0, k.cislo);
   }
-
-  let predpokladaneDokonceni = konecStroju;
-  if (zakazka.kompletaceHod > 0) {
-    const konec = pridejHodiny(konecStroju, zakazka.kompletaceHod, nastaveni.hodDenStroj.kompletace);
-    faze.kompletace = { start: konecStroju, konec, hodiny: zakazka.kompletaceHod };
-    predpokladaneDokonceni = konec;
-  }
-
-  return { faze, konecTpv, predpokladaneDokonceni };
+  return fronta;
 }
 
 /** Rozdělí hodiny fáze po pracovních dnech (ISO den → hodiny) podle zlomků dne × hodDen. */
@@ -73,10 +77,12 @@ export function dostupneHodinyVTydnu(tyden: string, hodDen: number): number {
 export function naplanuj(stav: StavAplikace): Rozvrh {
   const { zakazky, pripravari, prirazeni, nastaveni } = stav;
   const zakazkyPodleCisla = new Map(zakazky.map((z) => [z.cislo, z]));
-  const vysledek: Record<string, RozvrhZakazky> = {};
   const konecFronty: Record<string, PracovniCas> = {};
   const vytizeni: Record<string, Record<string, number>> = {};
+  const frontyFaze = prazdnePoradiFaze();
 
+  // 5.1 — TPV ve frontách přípravářů.
+  const naplanovane = new Map<string, { pripravarId: string; konecTpv: PracovniCas; faze: Partial<Record<FazeId, FazeRozvrh>> }>();
   for (const pripravar of pripravari) {
     let kurzor = zacatekFronty(nastaveni);
     const tydny: Record<string, number> = {};
@@ -85,42 +91,70 @@ export function naplanuj(stav: StavAplikace): Rozvrh {
       .sort((a, b) => a.poradi - b.poradi);
 
     for (const polozka of fronta) {
-      if (vysledek[polozka.zakazkaCislo]) continue; // duplicitní přiřazení — platí první
+      if (naplanovane.has(polozka.zakazkaCislo)) continue; // duplicitní přiřazení — platí první
       const zakazka = zakazkyPodleCisla.get(polozka.zakazkaCislo)!;
-      const plan = naplanujZakazku(zakazka, kurzor, nastaveni);
+      const plan = naplanujTpv(zakazka, kurzor, nastaveni);
       kurzor = plan.konecTpv;
 
-      if (plan.faze.tpv) {
-        for (const [den, hodiny] of Object.entries(hodinyPoDnech(plan.faze.tpv, nastaveni.hodDenPripravar))) {
+      if (plan.tpv) {
+        for (const [den, hodiny] of Object.entries(hodinyPoDnech(plan.tpv, nastaveni.hodDenPripravar))) {
           const tyden = isoTyden(den);
           tydny[tyden] = Math.round(((tydny[tyden] ?? 0) + hodiny) * 1e6) / 1e6;
         }
       }
-
-      vysledek[zakazka.cislo] = {
-        cislo: zakazka.cislo,
-        pripravarId: pripravar.id,
-        faze: plan.faze,
-        predpokladaneDokonceni: plan.predpokladaneDokonceni,
-        stav: urciStav(plan.predpokladaneDokonceni, zakazka.terminDokonceni, nastaveni.rezervaDny),
-        ...nejpozdejsiStart(zakazka, nastaveni),
-      };
+      naplanovane.set(zakazka.cislo, { pripravarId: pripravar.id, konecTpv: plan.konecTpv, faze: plan.tpv ? { tpv: plan.tpv } : {} });
     }
 
     konecFronty[pripravar.id] = kurzor;
     vytizeni[pripravar.id] = tydny;
   }
 
-  for (const zakazka of zakazky) {
-    if (!vysledek[zakazka.cislo]) {
-      vysledek[zakazka.cislo] = {
-        cislo: zakazka.cislo,
-        faze: {},
-        stav: 'neprirazeno',
-        ...nejpozdejsiStart(zakazka, nastaveni),
-      };
+  // 5.7 — stroje a kompletace ve vlastních frontách; zakázka čeká na předchozí fázi i na předchozí zakázku ve frontě.
+  const konecStroju = (cislo: string): PracovniCas => {
+    const n = naplanovane.get(cislo)!;
+    return STROJE.reduce((m, s) => (n.faze[s] ? max(m, n.faze[s]!.konec) : m), n.konecTpv);
+  };
+  const naplanujFrontu = (faze: NavazujiciFaze, pripraveno: (cislo: string) => PracovniCas) => {
+    const kandidati = zakazky
+      .filter((z) => naplanovane.has(z.cislo) && hodinyFaze(z, faze) > 0)
+      .map((z) => ({ cislo: z.cislo, pripraveno: pripraveno(z.cislo), terminDokonceni: z.terminDokonceni }));
+    const pripravenoPodleCisla = new Map(kandidati.map((k) => [k.cislo, k.pripraveno]));
+    const fronta = sestavFrontu(stav.poradiFaze?.[faze] ?? [], kandidati);
+    let kurzor = zacatekFronty(nastaveni);
+    for (const cislo of fronta) {
+      const hodiny = hodinyFaze(zakazkyPodleCisla.get(cislo)!, faze);
+      const pripravenoFaze = pripravenoPodleCisla.get(cislo)!;
+      const start = max(kurzor, pripravenoFaze);
+      const konec = pridejHodiny(start, hodiny, nastaveni.hodDenStroj[faze]);
+      naplanovane.get(cislo)!.faze[faze] = { start, konec, hodiny, pripraveno: pripravenoFaze };
+      kurzor = konec;
     }
+    frontyFaze[faze] = fronta;
+  };
+  for (const faze of NAVAZUJICI_FAZE) {
+    naplanujFrontu(faze, faze === 'kompletace' ? konecStroju : (cislo) => naplanovane.get(cislo)!.konecTpv);
   }
 
-  return { zakazky: vysledek, konecFronty, vytizeni };
+  const vysledek: Record<string, RozvrhZakazky> = {};
+  for (const zakazka of zakazky) {
+    const n = naplanovane.get(zakazka.cislo);
+    if (!n) {
+      vysledek[zakazka.cislo] = { cislo: zakazka.cislo, faze: {}, stav: 'neprirazeno', ...nejpozdejsiStart(zakazka, nastaveni) };
+      continue;
+    }
+    // Fáze v pevném pořadí TPV → stroje → kompletace (jen fáze s hodinami > 0).
+    const faze: Partial<Record<FazeId, FazeRozvrh>> = {};
+    for (const f of FAZE) if (n.faze[f]) faze[f] = n.faze[f];
+    const predpokladaneDokonceni = faze.kompletace?.konec ?? konecStroju(zakazka.cislo);
+    vysledek[zakazka.cislo] = {
+      cislo: zakazka.cislo,
+      pripravarId: n.pripravarId,
+      faze,
+      predpokladaneDokonceni,
+      stav: urciStav(predpokladaneDokonceni, zakazka.terminDokonceni, nastaveni.rezervaDny),
+      ...nejpozdejsiStart(zakazka, nastaveni),
+    };
+  }
+
+  return { zakazky: vysledek, konecFronty, vytizeni, frontyFaze };
 }

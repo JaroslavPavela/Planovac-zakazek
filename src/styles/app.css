@@ -513,6 +513,56 @@ input[type='number'] {
 
 /* ---------- sekce (záložky) ---------- */
 
+/* Část Příprava / Stroje / Kompletace: Gantt nahoře, tabule pod ním vyplní zbytek výšky. */
+.cast {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.cast > .gantt {
+  flex: 0 0 auto;
+}
+
+.cast .gantt-posuv {
+  max-height: 45vh;
+}
+
+.cast > .tabule {
+  flex: 1 1 0;
+  min-height: 360px;
+  height: auto;
+}
+
+.sloupec-fronta {
+  flex: 1 1 260px;
+  max-width: 440px;
+}
+
+.sloupec-mrizka {
+  max-width: none;
+}
+
+.sloupec-mrizka .sloupec-hlavicka {
+  max-width: 440px;
+}
+
+.sloupec-mrizka .sloupec-telo {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  align-content: start;
+}
+
+.karta-poradi {
+  color: var(--barva-tlumena);
+}
+
+.stitek-ceka {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .sekce {
   display: none;
   height: 100%;
@@ -593,6 +643,13 @@ input[type='number'] {
   width: 2px;
   height: 14px;
   border-radius: 0;
+}
+
+.gantt-legenda .legenda-cekani {
+  width: 18px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed #6b7280;
 }
 
 .legenda-plan {
@@ -813,5 +870,27 @@ input[type='number'] {
 
   .sloupce-pripravaru {
     overflow: visible;
+  }
+
+  .cast {
+    display: block;
+    height: auto;
+  }
+
+  .cast > .gantt {
+    margin-bottom: 0.5rem;
+  }
+
+  .cast .gantt-posuv {
+    max-height: none;
+  }
+
+  .cast > .tabule {
+    min-height: 0;
+  }
+
+  .sloupec-fronta {
+    flex: 1 1 0;
+    max-width: none;
   }
 }

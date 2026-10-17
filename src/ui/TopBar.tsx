@@ -57,7 +57,7 @@ export function TopBar({ rozvrh, nastaveniOtevrene, onPrepnoutNastaveni, onOtevr
       console.error('Import selhal', chyba);
     }
     if (vysledek.ok) {
-      nahradData(vysledek.zakazky, vysledek.prirazeni);
+      nahradData(vysledek.zakazky, vysledek.prirazeni, vysledek.poradiFaze);
       onOtevritNastaveni();
     }
     setSouhrn({ vysledek, nazev: soubor.name });
@@ -117,7 +117,7 @@ export function TopBar({ rozvrh, nastaveniOtevrene, onPrepnoutNastaveni, onOtevr
         <button type="button" onClick={navrhni} disabled={prirazeno === zakazky.length}>
           Navrhnout rozdělení
         </button>
-        <button type="button" onClick={zpet} disabled={minulost.length === 0} title="Zpět (přiřazení)">
+        <button type="button" onClick={zpet} disabled={minulost.length === 0} title="Zpět (přiřazení a pořadí front)">
           ↶ Zpět
         </button>
         <button type="button" onClick={znovu} disabled={budoucnost.length === 0} title="Znovu">

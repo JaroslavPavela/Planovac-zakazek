@@ -2,10 +2,10 @@
 
 import * as XLSX from 'xlsx';
 import { dostupneHodinyVTydnu } from '../domain/scheduler';
-import { FAZE, STAV_POPISEK, STROJE, STROJ_POPISEK, nazevFaze, vychoziNastaveni } from '../domain/types';
+import { FAZE, NAVAZUJICI_FAZE, STAV_POPISEK, STROJE, STROJ_POPISEK, nazevFaze, vychoziNastaveni } from '../domain/types';
 import type { FazeId, Nastaveni, PracovniCas, Rozvrh, StavAplikace, Zakazka } from '../domain/types';
 import { isoNaExcelSerial, pracovniCasNaExcelSerial } from './excelDatum';
-import { NAZVY_SLOUPCU, POVINNE_SLOUPCE } from './headers';
+import { NAZVY_SLOUPCU, POVINNE_SLOUPCE, SLOUPEC_PORADI_FAZE } from './headers';
 
 const FORMAT_DATUM = 'd.m.yyyy';
 const FORMAT_DATUM_CAS = 'd.m.yyyy h:mm';
@@ -25,7 +25,7 @@ export function nazevSouboruExportu(dnesIso: string): string {
 }
 
 /**
- * Hlavička listu Plán. Sloupce hodin mají pevné názvy (Stroj 1–3 [h], kvůli zpětnému načtení),
+ * Hlavička listu Plán. Sloupce hodin a pořadí front mají pevné názvy (Stroj 1–3 [h], Pořadí Stroj 1–3, kvůli zpětnému načtení),
  * sloupce start/konec fází používají názvy strojů z nastavení.
  */
 export function hlavickaPlanu(nastaveni: Nastaveni): string[] {
@@ -33,6 +33,7 @@ export function hlavickaPlanu(nastaveni: Nastaveni): string[] {
     ...POVINNE_SLOUPCE.map((k) => NAZVY_SLOUPCU[k]),
     NAZVY_SLOUPCU.pripravar,
     NAZVY_SLOUPCU.poradi,
+    ...NAVAZUJICI_FAZE.map((f) => NAZVY_SLOUPCU[SLOUPEC_PORADI_FAZE[f]]),
     ...FAZE.flatMap((f) => [`${nazevFaze(nastaveni, f)} start`, `${nazevFaze(nastaveni, f)} konec`]),
     'Předpokládané dokončení',
     'Stav',
@@ -85,6 +86,10 @@ function listPlan(stav: StavAplikace, rozvrh: Rozvrh): XLSX.WorkSheet {
       datum(z.terminDokonceni),
       p ? (nazvyPripravaru.get(p.pripravarId) ?? '') : '',
       p ? p.poradi : null,
+      ...NAVAZUJICI_FAZE.map((f) => {
+        const i = rozvrh.frontyFaze[f].indexOf(z.cislo);
+        return i < 0 ? null : i;
+      }),
     ];
     for (const faze of FAZE) {
       const f = r?.faze[faze];

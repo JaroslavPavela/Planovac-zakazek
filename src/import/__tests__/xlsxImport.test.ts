@@ -156,6 +156,25 @@ describe('nactiXlsx', () => {
     expect(v.varovani).toEqual([{ radek: 5, cislo: 'D', text: 'Přípravář „Karel“ není v nastavení — zakázka je v zásobníku' }]);
   });
 
+  it('sloupce Pořadí Stroj 1–3 / Pořadí kompletace obnoví ruční pořadí front jen u přiřazených zakázek', () => {
+    const v = nactiRadky(
+      [
+        [...HLAVICKA, 'Přípravář', 'Pořadí', 'Pořadí Stroj 1', 'Pořadí Kompletace'],
+        [...radek('A'), 'Přípravář 1', 0, 1, ''],
+        [...radek('B'), 'Přípravář 2', 0, '0', 0],
+        [...radek('C'), 'Přípravář 1', 1, null, 1],
+        [...radek('D'), '', '', 2, 2], // zásobník — do front nepatří
+      ],
+      vychoziPripravari(),
+    );
+    expect(v.ok && v.poradiFaze).toEqual({ stroj1: ['B', 'A'], stroj2: [], stroj3: [], kompletace: ['B', 'C'] });
+  });
+
+  it('soubor bez sloupců pořadí front → prázdné ruční pořadí', () => {
+    const v = nactiRadky([[...HLAVICKA, 'Přípravář'], [...radek('A'), 'Přípravář 1']], vychoziPripravari());
+    expect(v.ok && v.poradiFaze).toEqual({ stroj1: [], stroj2: [], stroj3: [], kompletace: [] });
+  });
+
   it('prázdný sešit → chybí všechny povinné sloupce', () => {
     const v = nactiXlsx(sesitZRadku([[]]));
     expect(v.ok).toBe(false);
@@ -206,6 +225,34 @@ describe('export', () => {
     expect(v.ok && v.prirazeni.length).toBe(4);
     const klic = (p: { zakazkaCislo: string; pripravarId: string; poradi: number }) => `${p.pripravarId}/${p.poradi}/${p.zakazkaCislo}`;
     expect(v.ok && v.prirazeni.map(klic).sort()).toEqual(stav.prirazeni.map(klic).sort());
+  });
+
+  it('export → import obnoví ruční pořadí front strojů a kompletace i výsledný rozvrh beze změny', () => {
+    const stav = stavSeVzorkem();
+    stav.zakazky = stav.zakazky.map((z) => (z.cislo === 'Z2' ? { ...z, stroj1Hod: 8, kompletaceHod: 4 } : z));
+    expect(naplanuj(stav).frontyFaze.stroj1).toEqual(['Z2', 'Z1']); // automaticky podle připravenosti
+    stav.poradiFaze = { stroj1: ['Z1', 'Z2'], kompletace: ['Z1'] }; // Z2 čeká na stroji 1; v kompletaci se Z2 zařadí podle připravenosti
+    const rozvrh = naplanuj(stav);
+
+    const v = nactiXlsx(exportujXlsx(stav, rozvrh), stav.pripravari);
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(v.poradiFaze.stroj1).toEqual(['Z1', 'Z2']);
+    const znovu = naplanuj({ ...stav, zakazky: v.zakazky, prirazeni: v.prirazeni, poradiFaze: v.poradiFaze });
+    expect(znovu.frontyFaze).toEqual(rozvrh.frontyFaze);
+    expect(znovu.zakazky).toEqual(rozvrh.zakazky);
+  });
+
+  it('list Plán: pořadí ve frontách strojů a kompletace (prázdné, když zakázka ve frontě není)', () => {
+    const stav = stavSeVzorkem();
+    const sesit = XLSX.read(exportujXlsx(stav, naplanuj(stav)), { type: 'array' });
+    const plan = XLSX.utils.sheet_to_json<unknown[]>(sesit.Sheets['Plán'], { header: 1, raw: true, defval: null });
+    const iStroj1 = HLAVICKA_PLANU.indexOf('Pořadí Stroj 1');
+    expect(HLAVICKA_PLANU.slice(iStroj1, iStroj1 + 4)).toEqual(['Pořadí Stroj 1', 'Pořadí Stroj 2', 'Pořadí Stroj 3', 'Pořadí kompletace']);
+    const radekZ1 = plan.find((r) => r[0] === 'Z1')!;
+    expect(radekZ1.slice(iStroj1, iStroj1 + 4)).toEqual([0, null, null, 0]);
+    const radekZ3 = plan.find((r) => r[0] === 'Z3')!; // zásobník
+    expect(radekZ3.slice(iStroj1, iStroj1 + 4)).toEqual([null, null, null, null]);
   });
 
   it('list Plán má správné sloupce a data jako excelová data; listy Vytížení a Nastavení existují', () => {
@@ -259,6 +306,7 @@ describe('názvy strojů v exportu', () => {
     expect(h).toContain('Ohraňovák konec');
     expect(h).toContain('Stroj 3 start'); // prázdný název → výchozí
     expect(h).not.toContain('Stroj 1 start');
+    expect(h).toContain('Pořadí Stroj 1'); // pořadí front má pevný název kvůli zpětnému načtení
   });
 });
 

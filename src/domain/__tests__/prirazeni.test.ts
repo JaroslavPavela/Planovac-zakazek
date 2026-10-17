@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { frontaPripravare, presunZakazku } from '../prirazeni';
+import { frontaPripravare, odeberZFrontFaze, presunVeFronteFaze, presunZakazku } from '../prirazeni';
 import type { Prirazeni } from '../types';
 
 const vychozi: Prirazeni[] = [
@@ -34,3 +34,15 @@ describe('presunZakazku', () => {
   });
 });
 
+
+describe('fronty strojů a kompletace', () => {
+  it('presunVeFronteFaze přesouvá dolů, nahoru i na konec', () => {
+    expect(presunVeFronteFaze(['A', 'B', 'C'], 'A', 2)).toEqual(['B', 'C', 'A']);
+    expect(presunVeFronteFaze(['A', 'B', 'C'], 'C', 0)).toEqual(['C', 'A', 'B']);
+    expect(presunVeFronteFaze(['A', 'B', 'C'], 'B')).toEqual(['A', 'C', 'B']);
+  });
+
+  it('odeberZFrontFaze odebere zakázku ze všech ručních pořadí', () => {
+    expect(odeberZFrontFaze({ stroj1: ['A', 'B'], kompletace: ['B'] }, 'B')).toEqual({ stroj1: ['A'], kompletace: [] });
+  });
+});

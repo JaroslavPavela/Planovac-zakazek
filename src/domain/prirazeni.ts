@@ -1,6 +1,7 @@
-// Čisté operace nad přiřazeními (přesun drag & drop, odebrání). Pořadí ve frontách se vždy přečísluje od 0.
+// Čisté operace nad přiřazeními (přesun drag & drop, odebrání) a nad frontami strojů a kompletace.
+// Pořadí ve frontách přípravářů se vždy přečísluje od 0.
 
-import type { Prirazeni } from './types';
+import type { PoradiFaze, Prirazeni } from './types';
 
 /** Přečísluje pořadí v každé frontě od 0 podle stávajícího pořadí (stabilně). */
 export function precislujFronty(prirazeni: Prirazeni[]): Prirazeni[] {
@@ -43,4 +44,19 @@ export function presunZakazku(
   const ostatni = bez.filter((p) => p.pripravarId !== pripravarId);
   const nova = fronta.map((c) => ({ zakazkaCislo: c, pripravarId, poradi: novePoradi.get(c)! }));
   return precislujFronty([...ostatni, ...nova]);
+}
+
+/**
+ * Přesune zakázku ve frontě stroje / kompletace na pozici `index` (index po odebrání přesouvané zakázky; mimo rozsah = na konec).
+ * Vstupem je výsledná fronta z rozvrhu; výstup se uloží jako ruční pořadí fáze.
+ */
+export function presunVeFronteFaze(fronta: readonly string[], cislo: string, index = Number.MAX_SAFE_INTEGER): string[] {
+  const bez = fronta.filter((c) => c !== cislo);
+  bez.splice(Math.max(0, Math.min(index, bez.length)), 0, cislo);
+  return bez;
+}
+
+/** Odebere zakázku z ručního pořadí všech front (po vrácení do zásobníku se při novém přiřazení zařadí podle připravenosti). */
+export function odeberZFrontFaze<T extends Partial<PoradiFaze>>(poradi: T, cislo: string): T {
+  return Object.fromEntries(Object.entries(poradi).map(([faze, fronta]) => [faze, (fronta ?? []).filter((c) => c !== cislo)])) as T;
 }
